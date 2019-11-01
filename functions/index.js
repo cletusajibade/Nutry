@@ -43,6 +43,16 @@ exports.addUser = functions.https.onRequest(async (req, res) => {
     }
 });
 
+/**
+ * API endpoint that expects JSON of the form:
+ * {
+	"food_name":"value",
+	"food_class":"value",
+	"price":"value",
+	"date":"value"
+    }
+ * @type {HttpsFunction}
+ */
 exports.addFood = functions.https.onRequest(async (req, res) => {
     if (req.method !== 'POST') {
         return res.status(401).json({
@@ -52,18 +62,18 @@ exports.addFood = functions.https.onRequest(async (req, res) => {
 
     try {
         console.log(req.body);
-        const data = {food_name, food_class} = req.body;
+        const data = {food_name, food_class, price} = req.body;
 
         // Add a new document with an auto-generated id.
-        // The 'users' collection is created if it does not already exist
-        const userRef = await db.collection('food').add(data).then(value=>{
+        // The 'food' collection is created if it does not already exist
+        const foodRef = await db.collection('food').add(data).then(value=>{
             return res.send(value.get().data());
         });
-        const user = await userRef.get();
+        const food = await foodRef.get();
 
         res.json({
-            id: userRef.id,
-            data: user.data()
+            id: foodRef.id,
+            data: food.data()
         });
     } catch (error) {
         res.status(500).send(error);
