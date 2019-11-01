@@ -50,6 +50,7 @@ exports.addUser = functions.https.onRequest(async (req, res) => {
 	"food_class":"value",
 	"price":"value",
 	"date":"value"
+	"serving":"value"
     }
  * @type {HttpsFunction}
  */
@@ -62,13 +63,11 @@ exports.addFood = functions.https.onRequest(async (req, res) => {
 
     try {
         console.log(req.body);
-        const data = {food_name, food_class, price} = req.body;
+        const data = {food_name, food_class, price, serving} = req.body;
 
         // Add a new document with an auto-generated id.
         // The 'food' collection is created if it does not already exist
-        const foodRef = await db.collection('food').add(data).then(value=>{
-            return res.send(value.get().data());
-        });
+        const foodRef = await db.collection('food').add(data);
         const food = await foodRef.get();
 
         res.json({
