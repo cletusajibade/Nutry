@@ -61,32 +61,33 @@ exports.getAllUsers = functions.https.onRequest((request, response) => {
 
     console.log(request.query);
     if(!request.query.isEmpty){
-        //
+        console.log(request.query);
     }
+    else {
+        db.collection('users').get()
+            .then(usersSnapshot => {
+                if (!usersSnapshot.empty) {
+                    let docArray = []; //Holds each user in the collection
+                    usersSnapshot.forEach(doc => {
+                        const row = {
+                            id: doc.id,
+                            data: doc.data()
+                        };
+                        docArray.push(row);
+                    });
+                    console.log(docArray);
 
-    db.collection('users').get()
-        .then(usersSnapshot => {
-            if (!usersSnapshot.empty) {
-                let docArray = []; //Holds each user in the collection
-                usersSnapshot.forEach(doc => {
-                    const row = {
-                        id: doc.id,
-                        data: doc.data()
-                    };
-                    docArray.push(row);
-                });
-                console.log(docArray);
-
-                //1. "response.send" converts docArray into JSON and sends it to the client
-                //2. It finally terminates this function
-                return response.send(docArray);
-            } else {
-                return response.send({msg: "No users in database"});
-            }
-        })
-        .catch(error => {
-            response.status(500).send(error);
-        })
+                    //1. "response.send" converts docArray into JSON and sends it to the client
+                    //2. It finally terminates this function
+                    return response.send(docArray);
+                } else {
+                    return response.send({msg: "No users in database"});
+                }
+            })
+            .catch(error => {
+                response.status(500).send(error);
+            })
+    }
 });
 
 /**
