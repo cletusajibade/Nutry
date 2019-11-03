@@ -61,6 +61,7 @@ exports.getAllUsers = functions.https.onRequest((request, response) => {
 
     console.log(request.query);
     if(!request.query.isEmpty){
+        //
         console.log(request.query);
     }
     else {
