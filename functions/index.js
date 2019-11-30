@@ -14,16 +14,16 @@ let auth = admin.auth();
 	"dateOfBirth":"value",
 	"height":value,
 	"weight":value,
-    "gender":"value",
-    "email":"abc@xyz.com",
-    "emailVerified": false,
-    "password":"value",
-    "photoURL": "http://www.example.com/12345678/photo.png",
-    "disabled": false,
-    "avoidFood": {
-    	"food1":"value1",
-    	"food2":"value2"
-    }
+    	"gender":"value",
+    	"email":"abc@xyz.com",
+    	"emailVerified": false,
+    	"password":"value",
+    	"photoURL": "http://www.example.com/12345678/photo.png",
+    	"disabled": false,
+    	"avoidFood": {
+    		"food1":"value1",
+    		"food2":"value2"
+    	}
     }
  * @type {HttpsFunction}
  */
