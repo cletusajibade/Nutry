@@ -5,24 +5,25 @@ admin.initializeApp(functions.config().firebase);
 let db = admin.firestore();
 let auth = admin.auth();
 
-// if(location.hostname==="localhost"){
-//     db.settings({
-//         host: "localhost:8084",
-//         ssl: false
-//     });
-// }
 
 /**
  * API endpoint expects JSON of the form:
  * {
-	"first_name":"value",
-	"last_name":"value",
-	"date_of_birth":"value",
+	"firstName":"value",
+	"lastName":"value",
+	"dateOfBirth":"value",
 	"height":value,
 	"weight":value,
     "gender":"value",
-    "email":"value",
+    "email":"abc@xyz.com",
+    "emailVerified": false,
     "password":"value",
+    "photoURL": "http://www.example.com/12345678/photo.png",
+    "disabled": false,
+    "avoidFood": {
+    	"food1":"value1",
+    	"food2":"value2"
+    }
     }
  * @type {HttpsFunction}
  */
@@ -111,6 +112,7 @@ exports.getAllUsers = functions.https.onRequest(async (request, response) => {
 
 
     /** Another Implementation using admin.auth().listUsers() **/
+    /** We may choose to go this route later; has more benefits and better performance **/
     // Start listing users from the beginning. This only lists the first 1000 users.
     //TODO: a better way to do this is to recursively list users in batches of 1000;
     // To be implemented later.
@@ -148,11 +150,11 @@ exports.getAllUsers = functions.https.onRequest(async (request, response) => {
 /**
  * API endpoint expects JSON of the form:
  * {
-	"food_name":"value",
-	"food_class":"value",
-	"price":"value",
-	"date":"value"
-	"serving":"value"
+    "foodName":"value",
+	"foodClass":"value",
+	"price":value,
+	"date":"YYYY-MM-DD",
+	"serving":value
     }
  * @type {HttpsFunction}
  */
