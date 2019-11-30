@@ -1,6 +1,5 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const authHandler = require('./util/AuthHandler');
 
 admin.initializeApp(functions.config().firebase);
 let db = admin.firestore();
@@ -28,10 +27,9 @@ let auth = admin.auth();
  * @type {HttpsFunction}
  */
 
-// Notice the use of "async, await".
-// This helps to handle promises without having to chain them together with the "then" function.
-// But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
-exports.addUser = functions.https.onRequest(async (request, response) => {
+// Using Promise chaining, get all users from the database
+// Notice the absence of "async, await"; promise chaining with "then" is used instead
+exports.addUser = functions.https.onRequest((request, response) => {
     //Make sure this is a POST request
     if (request.method !== "POST") {
         return response.status(401).json({
@@ -39,33 +37,46 @@ exports.addUser = functions.https.onRequest(async (request, response) => {
         });
     }
 
-    try {
-        // Destructure the request body into an object with corresponding properties
-        // const data = {first_name, last_name, date_of_birth, height, weight, gender, email, password} = request.body;
-        const data = request.body;
+    const authData = {
+        email: request.body.email,
+        emailVerified: false,
+        password: request.body.password,
+        disabled: false,
+    };
+    const customData = {
+        firstName: request.body.firstName,
+        lastName: request.body.lastName,
+        email: request.body.email,
+        dateOfBirth: request.body.dateOfBirth,
+        height: request.body.height,
+        weight: request.body.weight,
+        gender: request.body.gender,
+        photoURL: request.body.photoURL,
+        avoidFood: request.body.avoidFood,
+        dateCreated: new Date().toISOString()
+    };
 
-        //Get a random salt, and then a hash of the password before saving to firestore
-        const salt = authHandler.getPasswordSalt();
-        data.password = authHandler.getPasswordHash(data.password, salt);
-        data.salt = salt; //this adds a new field on the fly; was not sent along with the request
-
-        // Add a new document with an auto-generated id.
-        // The 'users' collection is created if it does not already exist
-        const userRef = await db.collection("users").add(data);
-        const user = await userRef.get();
-
-        response.json({
-            id: userRef.id,
-            data: user.data()
+    auth.createUser(authData)
+        .then((userRecord) => {
+            // On success, create a custom user collection/document
+            // that has the same uid returned by the createUser auth process
+            customData.uid = userRecord.uid;
+            return db.collection('users').doc(userRecord.uid).set(customData);
+        })
+        .then((writeResult) => {
+            return response.json({
+                message: 'Successfully created new user',
+                time: writeResult.writeTime
+            });
+        })
+        .catch((error) => {
+            return response.status(500).send(error);
         });
-    } catch (error) {
-        response.status(500).send(error);
-    }
 });
 
 // Using Promise chaining, get all users from the database
 // Notice the absence of "async, await"; promise chaining with "then" is used instead
-exports.getAllUsers = functions.https.onRequest((request, response) => {
+exports.getAllUsers = functions.https.onRequest(async (request, response) => {
     //Make sure this is a GET request
     if (request.method !== "GET") {
         return response.status(401).json({
@@ -95,8 +106,43 @@ exports.getAllUsers = functions.https.onRequest((request, response) => {
             }
         })
         .catch(error => {
-            response.status(500).send(error);
+            return response.status(500).send(error);
         });
+
+
+    /** Another Implementation using admin.auth().listUsers() **/
+    // Start listing users from the beginning. This only lists the first 1000 users.
+    //TODO: a better way to do this is to recursively list users in batches of 1000;
+    // To be implemented later.
+    // let docArray = []; //Holds each user in the collection
+    //auth.listUsers(1000)
+    //     .then(async listUserResult => {
+    //         //This line returns multiple promises
+    //         // so Promise.all() is used below to
+    //         const docPromises = await listUserResult.users.map(userRecord => {
+    //             return db.collection('users').doc(userRecord.uid).get();
+    //         });
+    //         return await Promise.all(docPromises);
+    //     })
+    //     .then(usersSnapshots => {
+    //
+    //         //TODO: for some reason unknown, this piece of code returns a big mixed JSON type.
+    //         // The "usersSnapshots" here does not allow forEach so it cannot be iterated over.
+    //         // A better implementation would look like the code commented below, but it does not work:
+    //         /*
+    //         const allUsers = [];
+    //         usersSnapshots.forEach(doc =>{
+    //             const data = doc.data();
+    //             allUsers.push(data);
+    //         });
+    //         return response.send(allUsers);
+    //         */
+    //
+    //         return response.send(usersSnapshots);
+    //     })
+    //     .catch(error => {
+    //         response.status(500).send(error);
+    //     });
 });
 
 /**
@@ -131,15 +177,14 @@ exports.addFood = functions.https.onRequest(async (request, response) => {
         const foodRef = await db.collection("food").add(data);
         const food = await foodRef.get();
 
-        response.json({
+        return response.json({
             id: foodRef.id,
             data: food.data()
         });
     } catch (error) {
-        response.status(500).send(error);
+        return response.status(500).send(error);
     }
 });
-
 
 /**
  * API endpoint expects JSON of the form:
@@ -149,7 +194,7 @@ exports.addFood = functions.https.onRequest(async (request, response) => {
     }
  * @type {HttpsFunction}
  */
-exports.login = functions.https.onRequest((request, response) => {
+exports.login = functions.https.onRequest(async (request, response) => {
     //Make sure this is a POST request
     if (request.method !== "POST") {
         return response.status(401).json({
@@ -157,61 +202,23 @@ exports.login = functions.https.onRequest((request, response) => {
         });
     }
 
-    // db.collection("users")
-    //     .get()
-    //     .then(usersSnapshot => {
-    //         if (!usersSnapshot.empty) {
-    //             let docArray = []; //Holds each user in the collection
-    //             usersSnapshot.forEach(doc => {
-    //                 const row = {
-    //                     id: doc.id,
-    //                     data: doc.data()
-    //                 };
-    //                 docArray.push(row);
-    //             });
-    //
-    //             //1. "response.send" converts docArray into JSON and sends it to the client
-    //             //2. It finally terminates this function
-    //             return response.send(docArray);
-    //         } else {
-    //             return response.send({msg: "No users in database"});
-    //         }
-    //     })
-    //     .catch(error => {
-    //         response.status(500).send(error);
-    //     });
+    const email = request.body.email;
+    const password = request.body.password;
+    //TODO: This endpoint validates login with just the email.
+    // Firebase Admin sdk Auth does not get user by both email and password through Cloud Functions.
+    // We will have to do something better that can make use of both Email and Password.
 
-    const authData = {
-        email: request.body.email,
-        emailVerified: false,
-        password: request.body.password,
-        disabled: false,
-    };
-    const customData = {
-        firstName: request.body.firstName,
-        lastName: request.body.lastName,
-        email: request.body.email,
-        dateOfBirth: request.body.dateOfBirth,
-        height: request.body.height,
-        weight: request.body.weight,
-        gender: request.body.gender,
-        photoURL: request.body.photoURL,
-        avoidFood: request.body.avoidFood,
-        dateCreated: new Date()
-    };
-    auth.createUser(authData)
-        .then((userRecord) => {
-            // On success, create a custom user collection/document
-            // that has the same uid returned by the createUser auth process
-            return db.collection('users').doc(userRecord.uid).set(customData);
-        })
-        .then((writeResult) => {
-            return response.json({
-                message: 'Successfully created new user',
-                time: writeResult.writeTime
-            });
-        })
-        .catch((error) => {
-            response.status(500).send(error);
-        });
+    try {
+        const userRecord = await auth.getUserByEmail(email);
+        const doc = await db.collection('users').doc(userRecord.uid).get();
+
+        if (!doc.exists) {
+            return response.send('No such document!');
+        } else {
+            const respData = Object.assign(userRecord.toJSON(), doc.data());
+            return response.send(respData);
+        }
+    } catch (error) {
+        return response.status(500).send(error);
+    }
 });
