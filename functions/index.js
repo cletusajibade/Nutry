@@ -8,27 +8,27 @@ let auth = admin.auth();
 /**
  * API endpoint expects JSON of the form:
  * {
-	"firstName":"value",
-	"lastName":"value",
-	"dateOfBirth":"value",
-	"height":value,
-	"weight":value,
-    "gender":"value",
-    "email":"abc@xyz.com",
-    "emailVerified": false,
-    "password":"value",
-    "photoURL": "http://www.example.com/12345678/photo.png",
-    "disabled": false,
-    "avoidFood": {
-    	"food1":"value1",
-    	"food2":"value2"
-    }
+        "firstName":"value",
+        "lastName":"value",
+        "dateOfBirth":"value",
+        "height":value,
+        "weight":value,
+        "gender":"value",
+        "email":"abc@xyz.com",
+        "emailVerified": false,
+        "password":"value",
+        "photoURL": "http://www.example.com/12345678/photo.png",
+        "disabled": false,
+        "avoidFood": {
+            "food1":"value1",
+            "food2":"value2"
+        }
     }
  * @type {HttpsFunction}
+ *
+ * Using Promise chaining, get all users from the database
+ * Notice the absence of "async, await"; promise chaining with "then" is used instead
  */
-
-// Using Promise chaining, get all users from the database
-// Notice the absence of "async, await"; promise chaining with "then" is used instead
 exports.addUser = functions.https.onRequest((request, response) => {
     //Make sure this is a POST request
     if (request.method !== "POST") {
@@ -74,8 +74,11 @@ exports.addUser = functions.https.onRequest((request, response) => {
         });
 });
 
-// Using Promise chaining, get all users from the database
-// Notice the absence of "async, await"; promise chaining with "then" is used instead
+/**
+ * API endpoint for getting all users. Has empty request body
+ * Uses Promise chaining to get all users from the database.
+ * Notice the absence of "async" and "await", promise chaining with "then" is used
+ */
 exports.getAllUsers = functions.https.onRequest(async (request, response) => {
     //Make sure this is a GET request
     if (request.method !== "GET") {
@@ -110,12 +113,13 @@ exports.getAllUsers = functions.https.onRequest(async (request, response) => {
         });
 
 
-    /** Another Implementation using admin.auth().listUsers() **/
+    /** Another Implementation using admin.auth().listUsers() is below**/
     /** We may choose to go this route later; has more benefits and better performance **/
+    /** But still has some TODOs as shown below **/
     // Start listing users from the beginning. This only lists the first 1000 users.
-    //TODO: a better way to do this is to recursively list users in batches of 1000;
-    // To be implemented later.
-    // let docArray = []; //Holds each user in the collection
+    //TODO 1: a better way to do this is to recursively list users in batches of 1000;
+    // To be implemented later:
+
     //auth.listUsers(1000)
     //     .then(async listUserResult => {
     //         //This line returns multiple promises
@@ -127,9 +131,9 @@ exports.getAllUsers = functions.https.onRequest(async (request, response) => {
     //     })
     //     .then(usersSnapshots => {
     //
-    //         //TODO: for some reason unknown, this piece of code returns a big mixed JSON type.
-    //         // The "usersSnapshots" here does not allow forEach so it cannot be iterated over.
-    //         // A better implementation would look like the code commented below, but it does not work:
+    //         //TODO 2: for some reason unknown, this piece of code returns a big mixed JSON type.
+    //         //TODO 2: The "usersSnapshots" here does not allow forEach so it cannot be iterated over.
+    //         //TODO 2: A better implementation would look like the code commented below, but it does not work for now:
     //         /*
     //         const allUsers = [];
     //         usersSnapshots.forEach(doc =>{
@@ -156,10 +160,11 @@ exports.getAllUsers = functions.https.onRequest(async (request, response) => {
 	"serving":value
     }
  * @type {HttpsFunction}
+ *
+ * Notice the use of "async", and "await".
+ * This helps to handle promises without having to chain them together with the "then" function.
+ * But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
  */
-// Notice the use of "async, await".
-// This helps to handle promises without having to chain them together with the "then" function.
-// But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
 exports.addFood = functions.https.onRequest(async (request, response) => {
     //Make sure this is a POST request
     if (request.method !== "POST") {
@@ -203,11 +208,12 @@ exports.login = functions.https.onRequest(async (request, response) => {
         });
     }
 
-    const email = request.body.email;
-    const password = request.body.password;
     //TODO: This endpoint validates login with just the email.
-    // Firebase Admin sdk Auth does not get user by both email and password through Cloud Functions.
+    // Firebase Admin SDK Auth does not get user by both Email and Password through Cloud Functions.
+    // This code uses "auth.getUserByEmail(email)".
     // We will have to do something better that can make use of both Email and Password.
+    const email = request.body.email;
+    const password = request.body.password; //the unused password
 
     try {
         const userRecord = await auth.getUserByEmail(email);
