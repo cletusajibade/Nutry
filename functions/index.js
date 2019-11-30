@@ -5,7 +5,6 @@ admin.initializeApp(functions.config().firebase);
 let db = admin.firestore();
 let auth = admin.auth();
 
-
 /**
  * API endpoint expects JSON of the form:
  * {
