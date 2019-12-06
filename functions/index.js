@@ -287,8 +287,12 @@ exports.logFoodIntake = functions.https.onRequest(async (request, response) => {
   try {
     // Destructure the request body into an object with corresponding properties
     // const data = {userId,food_name, calorieCount} = request.body;
-    const data = request.body;
-
+    const data = {
+      userId: request.body.userId,
+      food_name: request.body.food_name,
+      calorieCount: request.body.calorieCount,
+      loggedDate: new Date().toISOString()
+    };
     // Add a new document with an auto-generated id.
     // The 'food' collection is created if it does not already exist
     const logRef = await db.collection("loggedFood").add(data);
