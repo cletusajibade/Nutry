@@ -1,170 +1,304 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const crypto = require('crypto');
-//const authHandler = require('./util/AuthHandler');
 
 admin.initializeApp(functions.config().firebase);
 let db = admin.firestore();
-
-// if(location.hostname==="localhost"){
-//     db.settings({
-//         host: "localhost:8084",
-//         ssl: false
-//     });
-// }
+let auth = admin.auth();
 
 /**
  * API endpoint expects JSON of the form:
  * {
-	"first_name":"value",
-	"last_name":"value",
-	"date_of_birth":"value",
-	"height":value,
-	"weight":value,
-    "gender":"value",
-    "email":"value",
+        "firstName":"value",
+        "lastName":"value",
+        "dateOfBirth":"value",
+        "height":value,
+        "weight":value,
+        "gender":"value",
+        "email":"abc@xyz.com",
+        "emailVerified": false,
+        "password":"value",
+        "photoURL": "http://www.example.com/12345678/photo.png",
+        "disabled": false,
+        "avoidFood": {
+            "food1":"value1",
+            "food2":"value2"
+        }
+    }
+ * @type {HttpsFunction}
+ *
+ * Using Promise chaining, get all users from the database
+ * Notice the absence of "async, await"; promise chaining with "then" is used instead
+ */
+exports.addUser = functions.https.onRequest((request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
+
+  const authData = {
+    email: request.body.email,
+    emailVerified: false,
+    password: request.body.password,
+    disabled: false
+  };
+  const customData = {
+    firstName: request.body.firstName,
+    lastName: request.body.lastName,
+    email: request.body.email,
+    dateOfBirth: request.body.dateOfBirth,
+    height: request.body.height,
+    weight: request.body.weight,
+    gender: request.body.gender,
+    photoURL: request.body.photoURL,
+    avoidFood: request.body.avoidFood,
+    dateCreated: new Date().toISOString()
+  };
+
+  auth
+    .createUser(authData)
+    .then(userRecord => {
+      // On success, create a custom user collection/document
+      // that has the same uid returned by the createUser auth process
+      customData.uid = userRecord.uid;
+      return db
+        .collection("users")
+        .doc(userRecord.uid)
+        .set(customData);
+    })
+    .then(writeResult => {
+      return response.json({
+        message: "Successfully created new user",
+        time: writeResult.writeTime
+      });
+    })
+    .catch(error => {
+      return response.status(500).send(error);
+    });
+});
+
+/**
+ * API endpoint for getting all users. Has empty request body
+ * Uses Promise chaining to get all users from the database.
+ * Notice the absence of "async" and "await", promise chaining with "then" is used
+ */
+exports.getAllUsers = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a GET request
+  if (request.method !== "GET") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
+
+  db.collection("users")
+    .get()
+    .then(usersSnapshot => {
+      if (!usersSnapshot.empty) {
+        let docArray = []; //Holds each user in the collection
+        usersSnapshot.forEach(doc => {
+          const row = {
+            id: doc.id,
+            data: doc.data()
+          };
+          docArray.push(row);
+        });
+        console.log(docArray);
+
+        //1. "response.send" converts docArray into JSON and sends it to the client
+        //2. It finally terminates this function
+        return response.send(docArray);
+      } else {
+        return response.send({ msg: "No users in database" });
+      }
+    })
+    .catch(error => {
+      return response.status(500).send(error);
+    });
+
+  /** Another Implementation using admin.auth().listUsers() is below**/
+  /** We may choose to go this route later; has more benefits and better performance **/
+  /** But still has some TODOs as shown below **/
+  // Start listing users from the beginning. This only lists the first 1000 users.
+  //TODO 1: a better way to do this is to recursively list users in batches of 1000;
+  // To be implemented later:
+
+  //auth.listUsers(1000)
+  //     .then(async listUserResult => {
+  //         //This line returns multiple promises
+  //         // so Promise.all() is used below to
+  //         const docPromises = await listUserResult.users.map(userRecord => {
+  //             return db.collection('users').doc(userRecord.uid).get();
+  //         });
+  //         return await Promise.all(docPromises);
+  //     })
+  //     .then(usersSnapshots => {
+  //
+  //         //TODO 2: for some reason unknown, this piece of code returns a big mixed JSON type.
+  //         //TODO 2: The "usersSnapshots" here does not allow forEach so it cannot be iterated over.
+  //         //TODO 2: A better implementation would look like the code commented below, but it does not work for now:
+  //         /*
+  //         const allUsers = [];
+  //         usersSnapshots.forEach(doc =>{
+  //             const data = doc.data();
+  //             allUsers.push(data);
+  //         });
+  //         return response.send(allUsers);
+  //         */
+  //
+  //         return response.send(usersSnapshots);
+  //     })
+  //     .catch(error => {
+  //         response.status(500).send(error);
+  //     });
+});
+
+/**
+ * API endpoint expects JSON of the form:
+ * {
+    "foodName":"value",
+	"foodClass":"value",
+	"price":value,
+	"date":"YYYY-MM-DD",
+	"serving":value
+    }
+ * @type {HttpsFunction}
+ *
+ * Notice the use of "async", and "await".
+ * This helps to handle promises without having to chain them together with the "then" function.
+ * But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
+ */
+exports.addFood = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
+
+  try {
+    // Destructure the request body into an object with corresponding properties
+    // const data = {food_name, food_class, price, serving,calorie_count} = request.body;
+    const data = request.body;
+
+    // Add a new document with an auto-generated id.
+    // The 'food' collection is created if it does not already exist
+    const foodRef = await db.collection("food").add(data);
+    const food = await foodRef.get();
+
+    return response.json({
+      id: foodRef.id,
+      data: food.data()
+    });
+  } catch (error) {
+    return response.status(500).send(error);
+  }
+});
+
+/**
+ * API endpoint expects JSON of the form:
+ * {
+	"email":"value",
     "password":"value",
     }
  * @type {HttpsFunction}
  */
+exports.login = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
 
-// Notice the use of "async, await".
-// This helps to handle promises without having to chain them together with the "then" function.
-// But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
-exports.addUser = functions.https.onRequest(async (request, response) => {
-    //Make sure this is a POST request
-    if (request.method !== "POST") {
-        return response.status(401).json({
-            message: "Not allowed"
-        });
+  //TODO: This endpoint validates login with just the email.
+  // Firebase Admin SDK Auth does not get user by both Email and Password through Cloud Functions.
+  // This code uses "auth.getUserByEmail(email)".
+  // We will have to do something better that can make use of both Email and Password.
+  const email = request.body.email;
+  const password = request.body.password; //the unused password
+
+  try {
+    const userRecord = await auth.getUserByEmail(email);
+    const doc = await db
+      .collection("users")
+      .doc(userRecord.uid)
+      .get();
+
+    if (!doc.exists) {
+      return response.send("No such document!");
+    } else {
+      const respData = Object.assign(userRecord.toJSON(), doc.data());
+      return response.send(respData);
     }
-
-    try {
-        // Destructure the request body into an object with corresponding properties
-        // const data = {first_name, last_name, date_of_birth, height, weight, gender, email, password} = request.body;
-        const data = request.body;
-
-        //Hash the password
-        data.password = this.setPassword(data.password);
-
-        console.log(data);
-
-        // authHandler.setPassword(data.password);
-        // Add a new document with an auto-generated id.
-        // The 'users' collection is created if it does not already exist
-        const userRef = await db.collection("users").add(data);
-        const user = await userRef.get();
-        response.json({
-            id: userRef.id,
-            data: user.data()
-        });
-    } catch (error) {
-        response.status(500).send(error);
-    }
+  } catch (error) {
+    return response.status(500).send(error);
+  }
 });
 
-// Using Promise chaining, get all users from the database
-// Notice the absence of "async, await"; promise chaining with "then" is used instead
-exports.getAllUsers = functions.https.onRequest((request, response) => {
-    //Make sure this is a GET request
-    if (request.method !== "GET") {
-        return response.status(401).json({
-            message: "Not allowed"
-        });
-    }
+//This function will return user information when
+//userid is passed to it
+//The function expects JSON of the form {"uid":"xyusa12322522"}
+exports.getUser = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
 
-    console.log(request.query);
+  const userid = request.body.uid;
 
-    db.collection("users")
-        .get()
-        .then(usersSnapshot => {
-            if (!usersSnapshot.empty) {
-                let docArray = []; //Holds each user in the collection
-                usersSnapshot.forEach(doc => {
-                    const row = {
-                        id: doc.id,
-                        data: doc.data()
-                    };
-                    docArray.push(row);
-                });
-                console.log(docArray);
+  const userRecord = await auth.getUser(userid);
+  console.log("userrecord ", userRecord.uid);
+  const doc = await db
+    .collection("users")
+    .doc(userRecord.uid)
+    .get();
 
-                //1. "response.send" converts docArray into JSON and sends it to the client
-                //2. It finally terminates this function
-                return response.send(docArray);
-            } else {
-                return response.send({msg: "No users in database"});
-            }
-        })
-        .catch(error => {
-            response.status(500).send(error);
-        });
+  console.log("userrecord 2", doc.data);
+  if (!doc.empty) {
+    console.log(doc.id, " => ", doc.data());
+    let docArray = [];
+    const row = {
+      id: doc.id,
+      data: doc.data()
+    };
+    docArray.push(row);
+
+    console.log(doc.id, " => ", doc.data());
+    return response.send(docArray);
+  } else {
+    return response.send({ msg: "No users in database" });
+  }
 });
 
-/**
- * API endpoint expects JSON of the form:
- * {
-	"food_name":"value",
-	"food_class":"value",
-	"price":"value",
-	"date":"value"
-	"serving":"value"
-    }
- * @type {HttpsFunction}
- */
-// Notice the use of "async, await".
-// This helps to handle promises without having to chain them together with the "then" function.
-// But this must be done within "try,catch" block to handle any errors in case the promise was rejected.
-exports.addFood = functions.https.onRequest(async (request, response) => {
-    //Make sure this is a POST request
-    if (request.method !== "POST") {
-        return response.status(401).json({
-            message: "Not allowed"
-        });
-    }
+//This function will return user information when
+//userid is passed to it
+//The function expects JSON of the form {"uid":"xyusa12322522"}
+exports.logFoodIntake = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
 
-    try {
-        console.log(request.body);
-        const data = ({food_name, food_class, price, serving} = request.body);
+  try {
+    // Destructure the request body into an object with corresponding properties
+    // const data = {userId,food_name, calorieCount} = request.body;
+    const data = request.body;
 
-        // Add a new document with an auto-generated id.
-        // The 'food' collection is created if it does not already exist
-        const foodRef = await db.collection("food").add(data);
-        const food = await foodRef.get();
+    // Add a new document with an auto-generated id.
+    // The 'food' collection is created if it does not already exist
+    const logRef = await db.collection("loggedFood").add(data);
+    const loggedFood = await logRef.get();
 
-        response.json({
-            id: foodRef.id,
-            data: food.data()
-        });
-    } catch (error) {
-        response.status(500).send(error);
-    }
+    return response.json({
+      id: logRef.id,
+      data: loggedFood.data()
+    });
+  } catch (error) {
+    return response.status(500).send(error);
+  }
 });
-
-/**
- * Method to set salt and hash the password for a user.
- * setPassword method first creates a salt unique for every user,
- * then it hashes the salt with user password and creates a hash.
- * This hash is stored in the database as user password
- */
-exports.setPassword = function (password) {
-    // Hashing user's salt and password with 1000 iterations, 64 length and sha512 digest
-    const salt = crypto.randomBytes(16).toString('hex');
-    return crypto.pbkdf2Sync(password, salt, 1000, 64, `sha512`).toString(`hex`);
-};
-
-// exports.getSalt = function () {
-//     // Creating a unique salt for a particular user
-//     return crypto.randomBytes(16).toString('hex');
-// };
-
-// Method to check the entered password is correct or not.
-// valid password method checks whether the user password is correct or not.
-// It takes the user password from the request and salt from user database entry
-// It then hashes user password and salt,
-// then checks if this generated hash is equal to user's hash in the database or not.
-// If the user's hash is equal to generated hash, then the password is correct otherwise not
-// exports.validatePassword = function (password) {
-//     let hash = crypto.pbkdf2Sync(password, this.salt, 1000, 64, `sha512`).toString(`hex`);
-//     return this.hash === hash;
-// };

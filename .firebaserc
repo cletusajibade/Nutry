@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "nutry-72ade"
+    "default": "nutry-72ade",
+    "dev": "nutry-dev"
   }
 }
