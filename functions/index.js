@@ -178,7 +178,7 @@ exports.addFood = functions.https.onRequest(async (request, response) => {
 
   try {
     // Destructure the request body into an object with corresponding properties
-    // const data = {food_name, food_class, price, serving} = request.body;
+    // const data = {food_name, food_class, price, serving,calorie_count} = request.body;
     const data = request.body;
 
     // Add a new document with an auto-generated id.
@@ -238,6 +238,7 @@ exports.login = functions.https.onRequest(async (request, response) => {
 
 //This function will return user information when
 //userid is passed to it
+//The function expects JSON of the form {"uid":"xyusa12322522"}
 exports.getUser = functions.https.onRequest(async (request, response) => {
   //Make sure this is a POST request
   if (request.method !== "POST") {
@@ -269,5 +270,35 @@ exports.getUser = functions.https.onRequest(async (request, response) => {
     return response.send(docArray);
   } else {
     return response.send({ msg: "No users in database" });
+  }
+});
+
+//This function will return user information when
+//userid is passed to it
+//The function expects JSON of the form {"uid":"xyusa12322522"}
+exports.logFoodIntake = functions.https.onRequest(async (request, response) => {
+  //Make sure this is a POST request
+  if (request.method !== "POST") {
+    return response.status(401).json({
+      message: "Not allowed"
+    });
+  }
+
+  try {
+    // Destructure the request body into an object with corresponding properties
+    // const data = {userId,food_name, calorieCount} = request.body;
+    const data = request.body;
+
+    // Add a new document with an auto-generated id.
+    // The 'food' collection is created if it does not already exist
+    const logRef = await db.collection("loggedFood").add(data);
+    const loggedFood = await logRef.get();
+
+    return response.json({
+      id: logRef.id,
+      data: loggedFood.data()
+    });
+  } catch (error) {
+    return response.status(500).send(error);
   }
 });
